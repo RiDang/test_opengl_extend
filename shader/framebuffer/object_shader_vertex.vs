@@ -12,14 +12,12 @@ uniform mat4 model_mat;
 uniform mat4 view_mat;
 uniform mat4 projection_mat;
 
-uniform mat4 normal_model_mat;
-
 void main()
 {
    arg_world_pos = vec3(model_mat * vec4(in_pos, 1.0f));
-   arg_world_normal = mat3(normal_model_mat) * in_normal;
+   arg_world_normal = mat3(transpose(inverse(model_mat))) * in_normal;
    arg_tex_coord = in_tex_coord;
-   // arg_world_normal = mat3(transpose(inverse(view_mat * model_mat))) * in_normal;
+
    gl_Position = projection_mat * view_mat * vec4(arg_world_pos, 1.0);
    
 }
