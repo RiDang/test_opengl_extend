@@ -25,8 +25,7 @@ typedef struct {
 
 const int kWidth = 800, kHeight = 600;
 MouseInfo mouse_left_info, mouse_right_info;
-Camera gCamera;
-glm::vec3 gModelTraslate{0.0f, 0.0f, 0.0f};
+Camera camera;
 float delta_time = 0.5f;
 float last_time = 0.0f;
 
@@ -36,7 +35,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset ){
-    gCamera.update_forward(yoffset);
+    camera.update_forward(yoffset);
     // camera.info();
 }
 
@@ -48,28 +47,30 @@ void processInput(GLFWwindow* window){
         glfwSetWindowShouldClose(window, true);
     }
     // float  speed = 0.05f;;
-    float  speed = delta_time;
+    float  speed = delta_time * 10;
     if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
-        gModelTraslate += speed * gCamera.view_front();
+        camera.update_forward(speed);
+        camera.info();
 
     }
     else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
-        gModelTraslate -= speed * gCamera.view_front();
+        camera.update_forward(speed);
+        camera.info();
+
     }
     else if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
-        glm::vec3 front =  gCamera.view_front();
-        gModelTraslate +=  speed * normalize(glm::vec3(front.z, 0, -front.x));
+        camera.update_camera(0, -speed);
+        camera.info();
     }
     else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
-        glm::vec3 front = gCamera.view_front();
-        gModelTraslate +=  speed * normalize(glm::vec3(-front.z, 0, front.x));
+        camera.update_camera(0, speed);
+        camera.info();
     }
 
     if(glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS){
-        gCamera.reset();
-        gCamera.info();
+        camera.reset();
+        camera.info();
     }
-    gModelTraslate.y = 0.0;
 
     // ====== 鼠标右键设置 ===========
 
@@ -81,16 +82,13 @@ void processInput(GLFWwindow* window){
             glm::dvec2 cur_pos = glm::vec2(x, y);
             if(mouse_info.is_last_down){
                 glm::dvec2 delta_pos = cur_pos - mouse_info.last_down;
-                if (glm::length(delta_pos) < 1e-3)
-                    return;
-
                 delta_pos *= 0.1;
                 // camera.update_camera((float)(delta_pos[1]), (float)(delta_pos[0]));
                 if(left_or_right == GLFW_MOUSE_BUTTON_RIGHT){
-                    gCamera.update_camera((float)(delta_pos[1]), (float)(delta_pos[0]));
+                    camera.update_camera((float)(delta_pos[1]), (float)(delta_pos[0]));
                 }
                 else{
-                    gCamera.update_object_v2((float)(delta_pos[0]), (float)(delta_pos[1]));
+                    camera.update_object((float)(delta_pos[1]), (float)(delta_pos[0]));
                 }
 
             }
@@ -177,11 +175,6 @@ Shader::PathMap get_path_map(const std::string& prefix){
 
 int main()
 {
-
-    // // glm::vec3 res = glm::reflect(glm::vec3(1.0f, 0.0f, 0.0f), glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f)));
-    // glm::vec3 res = glm::reflect(glm::vec3(1.0f, 0.0f, 0.0f), glm::normalize(glm::vec3(-1.0f, -1.0f, 0.0f)));
-    // std::cout << " - " << res.x << ", " << res.y << ", " << res.z << std::endl;
-    // exit(-1);
     // ============== 窗口初始化 end
 
     GLFWwindow* window = InitWindow();
@@ -191,28 +184,29 @@ int main()
 
     
     glEnable(GL_DEPTH_TEST);
-    Shader::PathMap object_ath_map = get_path_map("skybox/object");
+    Shader::PathMap object_ath_map = get_path_map("framebuffer/object");
     Shader object_shader(object_ath_map);
 
-    Shader::PathMap quad_path_map = get_path_map("skybox/quad");
-    Shader quad_shader(quad_path_map);
+    Shader::PathMap light_path_map = get_path_map("framebuffer/light");
+    Shader light_shader(light_path_map);
+;
 
-    Shader::PathMap skybox_path_map = get_path_map("skybox/skybox");
-    Shader skybox_shader(skybox_path_map);
+    Shader::PathMap quad_path_map = get_path_map("framebuffer/quad");
+    Shader quad_shader(quad_path_map);
 
     const std::string tex_color_path = get_root_path() + "/data/container2.png";
     const std::string tex_specular_path = get_root_path() + "/data/container2_specular.png";
     unsigned int tex_color = load_texture(tex_color_path.c_str());
     unsigned int tex_specular = load_texture(tex_specular_path.c_str());
 
-    std::vector<std::string> face_paths = {
-            "right", "left", 
-            "top", "bottom", 
-            "front", "right"};
-    std::for_each(face_paths.begin(), face_paths.end(), 
-                [](std::string& name){ name =  get_root_path() + "/data/skybox/" + name + ".jpg";});
+    // std::vector<std::string> face_paths = {
+    //         "right", "left", 
+    //         "top", "bottom", 
+    //         "front", "right"};
+    // std::for_each(face_paths.begin(), face_paths.end(), 
+    //             [](const std::string& name){return get_root_path() + "/" + name + ".jpg";});
 
-    unsigned int tex_skybox = load_cubemap(face_paths);
+    // unsigned int tex_cube = load_cubemap(face_paths);
     
 
 
@@ -271,51 +265,6 @@ int main()
         1.0f, 1.0f, 0.0f, 1.0f, 1.0f
     };
 
-    float skybox_vertices[] = {
-        // positions          
-        -1.0f,  1.0f, -1.0f,
-        -1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f, -1.0f,
-
-        -1.0f, -1.0f,  1.0f,
-        -1.0f, -1.0f, -1.0f,
-        -1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f,  1.0f,
-        -1.0f, -1.0f,  1.0f,
-
-         1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f,  1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-
-        -1.0f, -1.0f,  1.0f,
-        -1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f, -1.0f,  1.0f,
-        -1.0f, -1.0f,  1.0f,
-
-        -1.0f,  1.0f, -1.0f,
-         1.0f,  1.0f, -1.0f,
-         1.0f,  1.0f,  1.0f,
-         1.0f,  1.0f,  1.0f,
-        -1.0f,  1.0f,  1.0f,
-        -1.0f,  1.0f, -1.0f,
-
-        -1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f,  1.0f,
-         1.0f, -1.0f, -1.0f,
-         1.0f, -1.0f, -1.0f,
-        -1.0f, -1.0f,  1.0f,
-         1.0f, -1.0f,  1.0f
-    };
-
     unsigned int VBOs[2], VAOs[2];
     glGenVertexArrays(2, VAOs);
     glGenBuffers(2, VBOs);
@@ -348,20 +297,6 @@ int main()
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-
-
-    // ----- VertexArray 3 ------
-    unsigned int VBO_sky, VAO_sky;
-    glGenVertexArrays(1, &VAO_sky);
-    glGenBuffers(1, &VBO_sky);
-
-    glBindVertexArray(VAO_sky);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_sky);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skybox_vertices), skybox_vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
 
     // tell opengl for each sampler to which texture unit it belongs to (only has to be done once)
     // -------------------------------------------------------------------------------------------
@@ -400,14 +335,8 @@ int main()
     object_shader.use();
     object_shader.set_int("texture_color", 0);
     object_shader.set_int("texture_specular", 1);
-    object_shader.set_int("tex_skybox", 2);
-    
     quad_shader.use();
     quad_shader.set_int("tex_quad", 0);
-
-    skybox_shader.use();
-    skybox_shader.set_int("tex_skybox", 0);
-
     // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     glm::vec3 light_pos(1.0f, 1.0f, 2.0f);
 
@@ -419,8 +348,7 @@ int main()
         glfwSetScrollCallback(window, scroll_callback);
 
         processInput(window);
-        // glBindFramebuffer(GL_FRAMEBUFFER, framebf);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebf);
         glEnable(GL_DEPTH_TEST);
 
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
@@ -433,21 +361,18 @@ int main()
         glm::mat4 normal_model_mat = glm::mat4(1.0f);
 
 
-        view = gCamera.view_mat4();
+        view = camera.view_mat4_;
         projection = glm::perspective(glm::radians(45.0f), (float)kWidth / (float)kHeight, 0.1f, 100.0f);
 
         model = glm::mat4(1.0f);
-        model = glm::translate(model, gModelTraslate);
         model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));
-        // model = glm::rotate(model, (float)cur_time, glm::vec3(0.2f, 1.0f, 0.2f));
-        model = glm::scale(model, glm::vec3(0.1));
+        model = glm::rotate(model, (float)cur_time, glm::vec3(0.2f, 1.0f, 0.2f));
+        model = glm::scale(model, glm::vec3(1.0f, 2.0f, 1.0f));
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tex_color);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, tex_specular);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, tex_skybox);
 
         object_shader.use();
         // - 设置矩阵
@@ -456,69 +381,51 @@ int main()
         object_shader.set_mat4("projection_mat", glm::value_ptr(projection));
         // 设置相机
         object_shader.set_vec3("light_pos", glm::value_ptr(light_pos));
-        object_shader.set_vec3("camera_pos", glm::value_ptr(gCamera.view_pos()));
-        object_shader.set_vec3("camera_front", glm::value_ptr(gCamera.view_front()));
+        object_shader.set_vec3("camera_pos", glm::value_ptr(camera.camera_pos_));
+        object_shader.set_vec3("camera_front", glm::value_ptr(camera.camera_front_));
         
         glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        // //  2
-        // // -------------------------------
-        // // glDisable(GL_DEPTH_TEST);
-        // glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // glEnable(GL_DEPTH_TEST);
-
-        // glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // // --- 2.1
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, tex_color);
-        // glActiveTexture(GL_TEXTURE1);
-        // glBindTexture(GL_TEXTURE_2D, tex_specular);
-
-        // object_shader.use();
-        // // - 设置矩阵
-        // model = glm::mat4(1.0f);
-        // model = glm::rotate(model, cur_time + glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        // object_shader.set_mat4("model_mat", glm::value_ptr(model));
-        // object_shader.set_mat4("view_mat", glm::value_ptr(view));
-        // object_shader.set_mat4("projection_mat", glm::value_ptr(projection));
-        // // 设置相机
-        // object_shader.set_vec3("light_pos", glm::value_ptr(light_pos));
-        // object_shader.set_vec3("camera_pos", glm::value_ptr(camera.camera_pos_));
-        // object_shader.set_vec3("camera_front", glm::value_ptr(camera.camera_front_));
-        
-        // glBindVertexArray(VAOs[0]);
-        // glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        // // --- 2.2
+        //  2
+        // -------------------------------
         // glDisable(GL_DEPTH_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glEnable(GL_DEPTH_TEST);
 
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, tex_bf);
-        // quad_shader.use();
+        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // glBindVertexArray(VAOs[1]);
-        // glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        // glEnable(GL_DEPTH_TEST);
-
-
-        // //  3
-        // // -------------------------------
-        glDepthFunc(GL_LEQUAL);
+        // --- 2.1
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, tex_skybox);
-        
-        skybox_shader.use();
-        skybox_shader.set_mat4("view_mat", glm::value_ptr(view));
-        skybox_shader.set_mat4("projection_mat", glm::value_ptr(projection));
+        glBindTexture(GL_TEXTURE_2D, tex_color);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, tex_specular);
 
-        glBindVertexArray(VAO_sky);
+        object_shader.use();
+        // - 设置矩阵
+        model = glm::mat4(1.0f);
+        model = glm::rotate(model, cur_time + glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        object_shader.set_mat4("model_mat", glm::value_ptr(model));
+        object_shader.set_mat4("view_mat", glm::value_ptr(view));
+        object_shader.set_mat4("projection_mat", glm::value_ptr(projection));
+        // 设置相机
+        object_shader.set_vec3("light_pos", glm::value_ptr(light_pos));
+        object_shader.set_vec3("camera_pos", glm::value_ptr(camera.camera_pos_));
+        object_shader.set_vec3("camera_front", glm::value_ptr(camera.camera_front_));
+        
+        glBindVertexArray(VAOs[0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        glDepthFunc(GL_LESS);
+        // --- 2.2
+        glDisable(GL_DEPTH_TEST);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tex_bf);
+        quad_shader.use();
+
+        glBindVertexArray(VAOs[1]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         
         glfwSwapBuffers(window);
@@ -529,8 +436,6 @@ int main()
 
     glDeleteVertexArrays(2, VAOs);
     glDeleteBuffers(2, VBOs);
-    glDeleteVertexArrays(1, &VAO_sky);
-    glDeleteBuffers(1, &VBO_sky);
     glfwTerminate();
     return 0;
 }

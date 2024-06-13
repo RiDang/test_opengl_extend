@@ -27,7 +27,9 @@ public:
 
    void update_camera(const float delta_pitch, const float delta_yaw, bool constrain = true);
 
-   void update_object(const float delta_phi, const float delta_theta, bool constrain = true);
+   void update_object(const float delta_theta, const float delta_phi, bool constrain = true);
+
+   void update_object_v2(const float delta_theta, const float delta_phi, bool constrain = true);
 
    void update_forward(const float delta_forward, bool constrain = true);
 
@@ -39,24 +41,40 @@ public:
     
     void reset();
 
+    void update_view();
+
     glm::mat4 look_at(const glm::vec3& start_pos, const glm::vec3& end_pos, const glm::vec3& up);
+    
+    // - value
+    glm::vec3 view_pos(){return view_pos_;}
+    glm::vec3 view_front(){return view_front_;}
+    glm::vec3 view_up(){return view_up_;}
+    glm::mat4 view_mat4(){return view_mat4_;}
 
 
-public:
+private:
     glm::vec3 camera_pos_{0.0f, 0.0f, 1.0f};
     glm::vec3 camera_front_{0.0f, 0.0f, -1.0f};
     glm::vec3 camera_up_{0.0f, 1.0f, 0.0f};
-    glm::vec3 camera_right{1.0f, 0.0f, 0.0f};
-    const glm::vec3 kWorldUp_{0.0f, 1.0f, 0.0f};
+    glm::vec3 camera_right_{1.0f, 0.0f, 0.0f};
+
+    glm::vec3 view_pos_{0.0f, 0.0f, 1.0f};
+    glm::vec3 view_front_{0.0f, 0.0f, -1.0f};
+    glm::vec3 view_up_{0.0f, 1.0f, 0.0f};
+    glm::vec3 view_right_{1.0f, 0.0f, 0.0f};
+
     glm::mat4 view_mat4_{glm::mat4(1.0f)};
+
+    const glm::vec3 kWorldUp_{0.0f, 1.0f, 0.0f};
+
     glm::mat4 object_mat4_{glm::mat4(1.0f)};
     glm::mat4 camera_mat4_{glm::mat4(1.0f)};
-
-    float pitch_{0.0f};
-    float yaw_{0.0f};
     
     float phi_{0.0f}; 
     float theta_{0.0f};
+
+    float pitch_{0.0f};
+    float yaw_{0.0f};
 
 
 
@@ -82,6 +100,16 @@ void Camera::info() const {
 }
 
 
+void Camera::update_view(){
+    glm::mat4 inv_object_mat4 = inverse(object_mat4_);
+    view_pos_ = glm::vec3(inv_object_mat4 * glm::vec4(camera_pos_, 1.0f));
+    view_front_ = glm::vec3(inv_object_mat4 * glm::vec4(camera_front_, 1.0f));
+    view_up_ = glm::vec3(inv_object_mat4 * glm::vec4(camera_up_, 1.0f));
+    view_right_ = glm::vec3(inv_object_mat4 * glm::vec4(camera_right_, 1.0f));
+
+    view_mat4_ = camera_mat4_ * object_mat4_;
+}
+
 void Camera::compute_object_mat4(){
     glm::mat4 object_mat4 = glm::mat4(1.0f);
     glm::vec3 axis_y =glm::vec3(0.0f, 1.0f, 0.0f);
@@ -89,6 +117,14 @@ void Camera::compute_object_mat4(){
     object_mat4 = glm::rotate(object_mat4, glm::radians(theta_), axis_y); // y -> x
     object_mat4_ = glm::rotate(object_mat4, glm::radians(phi_), axis_x); // y -> x
 }
+
+// void Camera::compute_object_mat4_v2(){
+//     glm::mat4 object_mat4 = glm::mat4(1.0f);
+//     glm::vec3 axis_y =glm::vec3(0.0f, 1.0f, 0.0f);
+//     glm::vec3 axis_x = glm::vec3(cos(theta_), 0, -sin(theta_));
+//     object_mat4 = glm::rotate(object_mat4, glm::radians(theta_), axis_y); // y -> x
+//     object_mat4_ = glm::rotate(object_mat4, glm::radians(phi_), axis_x); // y -> x
+// }
 
 glm::mat4 Camera::get_object_mat4(){
     return object_mat4_;
@@ -105,7 +141,8 @@ void Camera::reset(){
     
     compute_camera_mat4();
     compute_object_mat4();
-    view_mat4_ = camera_mat4_ * object_mat4_;
+    
+    update_view();
     
 }
 
@@ -124,7 +161,7 @@ void Camera::compute_camera_mat4(){
 
     camera_front_ = glm::normalize(direction);
 
-    glm::vec3 camera_right_ = glm::normalize(glm::cross(camera_front_, kWorldUp_));
+    camera_right_ = glm::normalize(glm::cross(camera_front_, kWorldUp_));
     glm::vec3 camera_up_ = glm::normalize(glm::cross(camera_right_, camera_front_));
 
     camera_mat4_ = glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_);
@@ -148,10 +185,10 @@ void Camera::update_camera(const float delta_pitch, const float delta_yaw, bool 
     compute_camera_mat4();
 
     // 计算旋转矩阵
-   view_mat4_ = camera_mat4_ * object_mat4_;
+    update_view();
 }
 
-void Camera::update_object(const float delta_phi, const float delta_theta, bool constrain){
+void Camera::update_object( const float delta_theta, const float delta_phi, bool constrain){
     // 首先进行更新
     phi_ += delta_phi;
     theta_ += delta_theta;
@@ -169,7 +206,39 @@ void Camera::update_object(const float delta_phi, const float delta_theta, bool 
     compute_object_mat4();
     
     // 计算旋转矩阵
-   view_mat4_ = camera_mat4_ * object_mat4_;
+    //  view_mat4_ = camera_mat4_ * object_mat4_;
+    update_view();
+}
+
+void Camera::update_object_v2(const float delta_theta, const float delta_phi, bool constrain){
+    // 首先进行更新
+    glm::vec3 dir = glm::vec3(delta_theta, -delta_phi, 0.0f);
+    glm::vec3 normal_dir = normalize(glm::vec3(-dir.y, dir.x, 0.0f));
+
+    std::cout << " - normal_dir " << normal_dir.x <<", " << normal_dir.y << ", " << normal_dir.z << std::endl;
+
+    glm::mat4 rotate=glm::mat4(1.0f);
+    rotate = glm::rotate(rotate, glm::radians(glm::length(dir)),  normal_dir);
+    object_mat4_ = rotate * object_mat4_;
+
+
+    std::cout << " - v2 camera_pos_ " << camera_pos_.x << ", " << camera_pos_.y << ", " << camera_pos_.z << std::endl;
+    std::cout << " - v2 camera_front_ " << camera_front_.x << ", " << camera_front_.y << ", " << camera_front_.z << std::endl;
+
+    // phi_ += delta_phi;
+    // theta_ += delta_theta;
+
+    // // 边界约束
+    // if(constrain){
+    //     if (phi_ > 89.0){ phi_ = 89.0;}
+    //     else if(phi_ < -89.0){phi_ = -89.0;}
+
+    //     if (theta_ > 89.0){ theta_ = 89.0;}
+    //     else if(theta_ < -89.0){theta_ = -89.0;}
+    // }
+
+
+    update_view();
 }
 
 
@@ -179,7 +248,8 @@ void Camera::update_forward(const float delta_forward, bool constrain){
      camera_pos_ -= delta_forward * camera_front_;
      camera_mat4_ = glm::lookAt(camera_pos_, camera_pos_ + camera_front_, camera_up_);
 
-     view_mat4_ = camera_mat4_ *  object_mat4_;
+    //  view_mat4_ = camera_mat4_ *  object_mat4_;
+    update_view();
 
 }
 
@@ -197,7 +267,6 @@ glm::mat4 Camera::look_at(const glm::vec3& start_pos, const glm::vec3& end_pos, 
     target_view[3] = glm::vec4(start_pos, 1);
 
     return  glm::inverse(target_view);
-
 }
 
 

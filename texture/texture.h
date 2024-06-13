@@ -133,6 +133,7 @@ unsigned int load_cubemap(std::vector<std::string> faces)
         {
             std::cout << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
             stbi_image_free(data);
+            exit(-1);
         }
     }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
